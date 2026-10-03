@@ -6,6 +6,9 @@ Add one or more directories containing a folder per game. The optional automatic
 
 This project customizes **folders**, not desktop shortcuts or the artwork inside a launcher.
 
+<img width="3253" height="687" alt="image" src="https://github.com/user-attachments/assets/aeb7b4b9-a852-465d-8a62-5e314d82d63b" />
+
+
 ## Install the Windows app
 
 Download `GameFolderIcons-Setup-1.0.0.exe` from [GitHub Releases](https://github.com/Shreypatel13ll/game-folder-cover-icons/releases). Run the installer, then open **Game Folder Icons Manager** from the Start menu. This per-user installation does not require administrator access or a separate Python installation.
