@@ -36,6 +36,7 @@ class ManagerWindow:
         style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"))
         self.roots = core.import_legacy_root_if_needed()
         self.busy = False
+        self.scanning_root: Path | None = None
         self.task_state = "none"
         self.status_text = tk.StringVar(value="Ready")
         self.task_text = tk.StringVar(value="Checking automatic scans…")
@@ -134,7 +135,10 @@ class ManagerWindow:
         for item in self.root_tree.get_children():
             self.root_tree.delete(item)
         for root in self.roots:
-            state = "Available" if Path(root).is_dir() else "Missing"
+            if self.scanning_root is not None and core.canonical(root) == core.canonical(self.scanning_root):
+                state = "Checking…"
+            else:
+                state = "Available" if Path(root).is_dir() else "Missing"
             self.root_tree.insert("", "end", iid=root, values=(root, state))
         if chosen and str(chosen) in self.roots:
             self.root_tree.selection_set(str(chosen))
@@ -164,6 +168,7 @@ class ManagerWindow:
         root = self.selected_root()
         if root is None or not root.is_dir():
             return
+        checking = self.scanning_root is not None and core.canonical(root) == core.canonical(self.scanning_root)
         state = icons.load_state().get("folders", {})
         try:
             folders = icons.direct_child_folders(root)
@@ -180,14 +185,27 @@ class ManagerWindow:
                     icon_state = "Managed icon"
                 elif has_icon:
                     icon_state = "Existing custom icon"
+                elif checking:
+                    icon_state = "Checking cover…"
                 elif record.get("status") == "retry":
-                    icon_state = "Retry pending"
+                    icon_state = "Retry scheduled"
+                elif record.get("status") == "settling":
+                    icon_state = "Folder settling"
+                elif record.get("status") == "pending":
+                    icon_state = "Waiting for game files"
+                elif self.task_state == "current":
+                    icon_state = "Queued for auto scan"
                 else:
-                    icon_state = "No icon yet"
+                    icon_state = "Ready to scan"
             self.game_tree.insert("", "end", iid=str(folder), values=(folder.name, icon_state))
-        self.status_text.set(f"{len(folders)} game folders in {root}")
+        if not self.busy:
+            self.status_text.set(f"{len(folders)} game folders in {root}")
 
     def add_root(self) -> None:
+        if self.busy:
+            messagebox.showinfo(APP_TITLE, "Wait for the current operation to finish before adding a library.",
+                                parent=self.window)
+            return
         chosen = filedialog.askdirectory(parent=self.window, title="Choose a folder containing game folders")
         if not chosen:
             return
@@ -198,7 +216,10 @@ class ManagerWindow:
         core.save_roots(self.roots + [path])
         self.refresh()
         self.root_tree.selection_set(path)
-        self.refresh_games()
+        self._background("Checking new library for covers…",
+                         lambda: core.scan_roots([path], max_candidates_per_root=2, busy_is_error=True),
+                         scanning_root=Path(path),
+                         completion_text="First check complete. Turn on automatic scans for future games.")
 
     def remove_root(self) -> None:
         root = self.require_root()
@@ -209,36 +230,50 @@ class ManagerWindow:
         core.save_roots([item for item in self.roots if core.canonical(item) != core.canonical(root)])
         self.refresh()
 
-    def _background(self, label: str, operation) -> None:
+    def _background(self, label: str, operation, scanning_root: Path | None = None,
+                    completion_text: str | None = None) -> None:
         if self.busy:
             messagebox.showinfo(APP_TITLE, "Another operation is still running.", parent=self.window)
             return
         self.busy = True
+        self.scanning_root = scanning_root
         self.status_text.set(label)
+        if scanning_root is not None:
+            if self.root_tree.exists(str(scanning_root)):
+                self.root_tree.set(str(scanning_root), "state", "Checking…")
+            self.refresh_games()
 
         def worker():
             try:
                 result = operation()
-                self.window.after(0, lambda: self._finished(label, result, None))
+                self.window.after(0, lambda: self._finished(label, result, None, completion_text))
             except Exception as exc:
-                self.window.after(0, lambda error=str(exc): self._finished(label, None, error))
+                self.window.after(0, lambda error=str(exc): self._finished(label, None, error, completion_text))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _finished(self, label: str, result, error: str | None) -> None:
+    def _finished(self, label: str, result, error: str | None, completion_text: str | None = None) -> None:
         self.busy = False
+        self.scanning_root = None
+        self.refresh()
         if error:
             messagebox.showerror(APP_TITLE, error, parent=self.window)
             self.status_text.set(f"{label} failed")
         else:
-            self.refresh()
             failed_scan = isinstance(result, int) and result != 0
-            self.status_text.set(f"{label}: check the log for details" if failed_scan else f"{label} complete")
+            if failed_scan:
+                self.status_text.set(f"{label}: check the log for details")
+            elif completion_text:
+                self.status_text.set(completion_text if self.task_state != "current"
+                                     else "First check complete. Remaining games will be checked automatically.")
+            else:
+                self.status_text.set(f"{label} complete")
 
     def scan_root(self) -> None:
         root = self.require_root()
         if root is not None:
-            self._background("Scan", lambda: core.scan_roots([str(root)]))
+            self._background("Checking game covers…", lambda: core.scan_roots([str(root)], busy_is_error=True),
+                             scanning_root=root)
 
     def choose_cover(self) -> None:
         game = self.require_game()
