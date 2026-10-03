@@ -93,13 +93,16 @@ def import_legacy_root_if_needed() -> list[str]:
     return roots
 
 
-def scan_roots(roots: list[str], max_candidates_per_root: int | None = None) -> int:
+def scan_roots(roots: list[str], max_candidates_per_root: int | None = None,
+               busy_is_error: bool = False) -> int:
     if not roots:
         icons.LOG.info("No watched game libraries are configured")
         return 0
     with icons.SingleInstance() as acquired:
         if not acquired:
             icons.LOG.info("A game-folder scan is already running")
+            if busy_is_error:
+                raise RuntimeError("A game-folder scan is already running. Use Scan now after it finishes.")
             return 0
         results = [icons.scan(Path(root).resolve(), max_candidates=max_candidates_per_root) for root in roots]
     return max(results, default=0)

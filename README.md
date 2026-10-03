@@ -13,7 +13,7 @@ Download `GameFolderIcons-Setup-1.0.0.exe` from [GitHub Releases](https://github
 In the light-themed manager:
 
 1. Click **Add library…** and select a directory containing your game folders.
-2. Click **Scan now** to process it immediately.
+2. The manager immediately checks the new library and shows **Checking…** while it works. The first check handles up to two new games to stay lightweight; use **Scan now** to process the whole library immediately.
 3. Click **Turn on** to check watched libraries automatically every ten minutes. You can turn this off at any time.
 
 The manager also lists each game folder. Select a game to choose your own cover image, exclude or include it in future scans, restore an unchanged icon created by this tool, or open its folder. If you replace an existing custom icon, its previous setting is saved for restoration. To replace an icon already managed by this tool, restore it first. **Stop watching** removes a library from the watch list; it does not remove any icons.
