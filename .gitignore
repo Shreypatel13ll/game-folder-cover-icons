@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+*.log
+state.json
+scan.lock
+cache/
+*.ico
+*.png
+*.jpg
+*.jpeg
