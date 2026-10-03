@@ -926,13 +926,13 @@ def restore_managed(root: Path) -> int:
         if record.get("status") != "managed":
             continue
         folder = Path(key)
-        if folder.parent != root or not folder.is_dir() or folder.is_symlink():
+        if folder.parent.resolve() != root.resolve() or not folder.is_dir() or folder.is_symlink():
             continue
         try:
             if get_attrs(folder) & FILE_ATTRIBUTE_REPARSE_POINT:
                 continue
             icon = Path(record["icon"])
-            if icon.parent != folder or not icon.name.startswith(MANAGED_PREFIX):
+            if icon.parent.resolve() != folder.resolve() or not icon.name.startswith(MANAGED_PREFIX):
                 raise ValueError("Recorded icon path is outside its game folder")
             if not icon.is_file() or hashlib.sha256(icon.read_bytes()).hexdigest() != record["icon_sha256"]:
                 raise ValueError("Managed icon is missing or has been changed")
