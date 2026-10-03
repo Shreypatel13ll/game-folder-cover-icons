@@ -65,12 +65,12 @@ foreach ($file in @('auto_folder_icons.py', 'Run-Now.ps1', 'Uninstall.ps1')) {
 }
 
 $installedScript = Join-Path $installDir 'auto_folder_icons.py'
-$arguments = ('"{0}" --root "{1}" --scan' -f $installedScript, $resolvedRoot)
+$arguments = ('"{0}" --root "{1}" --background' -f $installedScript, $resolvedRoot)
 $action = New-ScheduledTaskAction -Execute $pythonw -Argument $arguments -WorkingDirectory $installDir
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 10)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
-    -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -RestartCount 3 `
-    -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+    -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 3)
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
 $description = "$marker | Root=$resolvedRoot | Adds cover art icons to new game folders"
@@ -78,5 +78,5 @@ $task = New-ScheduledTask -Action $action -Trigger $trigger -Settings $settings 
 Register-ScheduledTask -TaskPath '\' -TaskName $taskName -InputObject $task -Force | Out-Null
 Start-ScheduledTask -TaskPath '\' -TaskName $taskName
 
-Write-Output "Installed '$taskName' for $resolvedRoot. It scans every five minutes while you are signed in."
+Write-Output "Installed '$taskName' for $resolvedRoot. It scans every ten minutes while you are signed in."
 Write-Output "Log: $(Join-Path $installDir 'automation.log')"

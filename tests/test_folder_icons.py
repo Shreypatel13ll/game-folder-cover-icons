@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -29,6 +30,18 @@ class MatchingTests(unittest.TestCase):
 
 
 class FolderIconTests(unittest.TestCase):
+    def test_background_scan_limits_new_candidates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            candidates = [root / f"Game {index}" for index in range(5)]
+            state = {"version": icons.VERSION, "folders": {}, "history": [], "last_scan": int(time.time())}
+            with mock.patch.object(icons, "load_state", return_value=state), \
+                    mock.patch.object(icons, "direct_child_folders", return_value=candidates), \
+                    mock.patch.object(icons, "process_folder", return_value="pending") as process, \
+                    mock.patch.object(icons, "save_state"):
+                self.assertEqual(icons.scan(root, max_candidates=2), 0)
+            self.assertEqual(process.call_count, 2)
+
     def test_desktop_ini_keeps_unrelated_metadata(self):
         original = "[.ShellClassInfo]\r\nLocalizedResourceName=My Game\r\n\r\n[ViewState]\r\nMode=\r\n".encode("utf-16")
         updated = icons.merge_ini(original, ".folder-icon-auto-example.ico")
@@ -60,6 +73,19 @@ class FolderIconTests(unittest.TestCase):
 
             self.assertFalse((folder / "desktop.ini").exists())
             self.assertFalse(Path(record["icon"]).exists())
+
+    @unittest.skipUnless(__import__("os").name == "nt", "Windows Explorer metadata test")
+    def test_reapplying_same_cover_keeps_original_icon_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "Sample Game"
+            folder.mkdir()
+            state = {"version": icons.VERSION, "folders": {}, "history": []}
+            master = icons.make_master(Image.new("RGBA", (500, 750), "#225588"))
+            first = icons.apply_icon(folder, "Sample Game", master, "test", state)
+            second = icons.apply_icon(folder, "Sample Game", master, "test", state)
+            self.assertNotEqual(first["icon"], second["icon"])
+            self.assertTrue(Path(first["icon"]).exists())
+            self.assertTrue(Path(second["icon"]).exists())
 
 
 if __name__ == "__main__":

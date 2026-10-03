@@ -4,3 +4,4 @@
 *.yml text eol=lf
 *.txt text eol=lf
 .gitignore text eol=lf
+third_party_licenses/*.txt whitespace=-blank-at-eol,-blank-at-eof

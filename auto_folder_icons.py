@@ -746,8 +746,14 @@ def apply_icon(folder: Path, title: str, master: Image.Image, source: str, state
     with tempfile.TemporaryDirectory(prefix="gfi-") as temp_name:
         temp_icon = Path(temp_name) / "icon.ico"
         icon_hash = write_and_validate_ico(master, temp_icon)
-        icon_name = f"{MANAGED_PREFIX}{icon_hash[:10]}.ico"
+        icon_stem = f"{MANAGED_PREFIX}{icon_hash[:10]}"
+        icon_name = f"{icon_stem}.ico"
         icon_path = folder / icon_name
+        suffix = 1
+        while icon_path.exists():
+            icon_name = f"{icon_stem}-{suffix}.ico"
+            icon_path = folder / icon_name
+            suffix += 1
         staged = folder / f"{icon_name}.tmp"
         try:
             shutil.copyfile(temp_icon, staged)
@@ -893,31 +899,48 @@ def direct_child_folders(root: Path) -> list[Path]:
     return sorted(folders, key=lambda path: path.name.lower())
 
 
-def scan(root: Path, force_retry: bool = False) -> int:
+def scan(root: Path, force_retry: bool = False, max_candidates: int | None = None) -> int:
     if not root.is_dir():
         LOG.error("Games root is unavailable: %s", root)
         return 2
     state = load_state()
+    state_changed = False
     root_prefix = str(root.resolve()).lower().rstrip("\\/") + os.sep
     for key in list(state["folders"]):
         if key.startswith(root_prefix) and not Path(key).exists():
             del state["folders"][key]
-    state["history"] = [entry for entry in state.get("history", []) if Path(entry.get("folder", "")).exists()]
+            state_changed = True
+    old_history = state.get("history", [])
+    state["history"] = [entry for entry in old_history if Path(entry.get("folder", "")).exists()]
+    state_changed |= len(state["history"]) != len(old_history)
     counts: dict[str, int] = {}
     folders = direct_child_folders(root)
+    processed_candidates = 0
     for folder in folders:
+        key = str(folder.resolve()).lower()
+        previous = state["folders"].get(key)
         result = process_folder(folder, state, force_retry=force_retry)
         counts[result] = counts.get(result, 0) + 1
+        if state["folders"].get(key) != previous:
+            state_changed = True
+        if result == "managed":
+            # Keep the restoration record even if this run is interrupted later.
+            save_state(state)
+        if result in {"managed", "failed", "pending", "settling"}:
+            processed_candidates += 1
+            if max_candidates is not None and processed_candidates >= max_candidates:
+                break
+    now = int(time.time())
+    if state_changed or now - int(state.get("last_scan", 0)) >= 3600:
+        state["last_scan"] = now
+        state["last_root"] = str(root)
+        state["last_counts"] = counts
         save_state(state)
-    state["last_scan"] = int(time.time())
-    state["last_root"] = str(root)
-    state["last_counts"] = counts
-    save_state(state)
     LOG.info("Scan complete for %s: %s", root, counts)
     return 0 if not counts.get("failed") else 1
 
 
-def restore_managed(root: Path) -> int:
+def restore_managed(root: Path, only_folder: Path | None = None) -> int:
     """Restore only unchanged folder customizations recorded by this tool."""
     state = load_state()
     restored = 0
@@ -926,6 +949,8 @@ def restore_managed(root: Path) -> int:
         if record.get("status") != "managed":
             continue
         folder = Path(key)
+        if only_folder is not None and folder.resolve() != only_folder.resolve():
+            continue
         if folder.parent.resolve() != root.resolve() or not folder.is_dir() or folder.is_symlink():
             continue
         try:
@@ -981,6 +1006,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Automatically add cover-art icons to new game folders.")
     parser.add_argument("--root", type=Path, help="Directory containing one folder per game")
     parser.add_argument("--scan", action="store_true")
+    parser.add_argument("--background", action="store_true", help="Low-impact scheduled scan")
     parser.add_argument("--restore", action="store_true", help="Restore unchanged icons added by this tool")
     parser.add_argument("--force-retry", action="store_true")
     parser.add_argument("--self-test", action="store_true")
@@ -996,7 +1022,8 @@ def main() -> int:
             return 3 if args.restore else 0
         if args.restore:
             return restore_managed(args.root.resolve())
-        return scan(args.root.resolve(), force_retry=args.force_retry)
+        return scan(args.root.resolve(), force_retry=args.force_retry,
+                    max_candidates=2 if args.background else None)
 
 
 if __name__ == "__main__":

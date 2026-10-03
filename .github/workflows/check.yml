@@ -11,13 +11,13 @@ jobs:
       matrix:
         python-version: ['3.9', '3.11']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
       - name: Compile Python
-        run: python -m py_compile auto_folder_icons.py
+        run: python -m py_compile auto_folder_icons.py manager_core.py manager.py
       - name: Run tests
         run: python -m unittest discover -s tests -v

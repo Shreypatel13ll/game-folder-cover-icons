@@ -11,3 +11,8 @@ cache/
 *.png
 *.jpg
 *.jpeg
+dist/
+build/
+release/
+*.spec
+.venv-build/
